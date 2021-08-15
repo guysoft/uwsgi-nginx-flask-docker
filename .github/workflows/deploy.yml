@@ -4,14 +4,15 @@ on:
   push:
     branches:
       - master
+      - buildx
 
 jobs:
   build:
     strategy:
       matrix:
         image:
-          - name: latest
-            python_version: "3.8"
+          # - name: latest
+          #   python_version: "3.8"
           - name: python3.8
             python_version: "3.8"
           - name: python3.7
@@ -25,18 +26,32 @@ jobs:
       fail-fast: true
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python
-        uses: actions/setup-python@v1
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
         with:
-          python-version: "3.7"
-      - name: Install Dependencies
-        run: python3.7 -m pip install docker pytest
-      - name: Deploy Image
-        run: bash scripts/build-push.sh
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
         env:
           NAME: ${{ matrix.image.name }}
-          DOCKERFILE: ${{ matrix.image.dockerfile }}
+          DOCKERFILE: ${{ matrix.image.name }}.dockerfile
           PYTHON_VERSION: ${{ matrix.image.python_version }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          context: docker-images
+          file: docker-images/${{ matrix.image.name }}.dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: guysoft/uwsgi-nginx-flask:${{ matrix.image.name }}
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.MY_GITHUB_TOKEN }}
